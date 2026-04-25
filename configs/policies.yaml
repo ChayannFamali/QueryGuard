@@ -1,0 +1,29 @@
+policies:
+
+  - name: block-missing-limit
+    description: "SELECT без LIMIT может вернуть миллионы строк"
+    on:
+      - MISSING_LIMIT
+    action: BLOCK
+    message: "Add LIMIT to your query to prevent fetching unbounded rows"
+
+  - name: block-select-star
+    description: "SELECT * тащит лишние данные по сети"
+    on:
+      - SELECT_STAR
+    action: BLOCK
+    message: "Specify columns explicitly instead of SELECT *"
+
+  - name: warn-n-plus-one
+    description: "N+1 паттерн убивает базу"
+    on:
+      - N_PLUS_ONE
+    action: WARN
+    message: "N+1 detected — consider batching queries or using JOINs"
+
+  - name: warn-high-complexity
+    description: "Тяжёлые запросы с множеством JOIN-ов"
+    on:
+      - HIGH_COMPLEXITY
+    action: WARN
+    message: "Query complexity is high — consider simplifying"

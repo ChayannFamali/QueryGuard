@@ -1,0 +1,193 @@
+{{define "index.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>QueryGuard Dashboard</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js"></script>
+    <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+
+        /* Header */
+        .hdr{background:#1e293b;padding:.875rem 2rem;border-bottom:1px solid #334155;
+             display:flex;align-items:center;gap:.75rem}
+        .hdr h1{font-size:1.1rem;font-weight:700;color:#f1f5f9;letter-spacing:-.01em}
+        .badge{font-size:.65rem;font-weight:700;padding:2px 8px;border-radius:999px;
+               text-transform:uppercase;letter-spacing:.05em}
+        .badge-live{background:#166534;color:#4ade80}
+        .badge-dryrun{background:#78350f;color:#fbbf24}
+        .hdr-right{margin-left:auto;font-size:.75rem;color:#64748b}
+
+        /* Stats */
+        .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;padding:1.5rem 2rem}
+        .card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:1.25rem 1.5rem}
+        .card .lbl{font-size:.7rem;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+        .card .val{font-size:2.25rem;font-weight:800;line-height:1.1;margin-top:.2rem}
+        .c-total .val{color:#60a5fa}
+        .c-block .val{color:#f87171}
+        .c-warn  .val{color:#fbbf24}
+        .c-allow .val{color:#4ade80}
+
+        /* Feed */
+        .feed-hdr{padding:.5rem 2rem .75rem;display:flex;align-items:center;
+                  justify-content:space-between}
+        .feed-hdr h2{font-size:.75rem;font-weight:700;color:#64748b;
+                     text-transform:uppercase;letter-spacing:.08em}
+        .dot{display:inline-block;width:7px;height:7px;background:#4ade80;
+             border-radius:50%;animation:blink 1.4s infinite;margin-right:4px}
+        @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+        /* Table */
+        .tbl-wrap{padding:0 2rem 2rem;overflow-x:auto}
+        table{width:100%;border-collapse:collapse;font-size:.82rem}
+        thead th{background:#1e293b;padding:.7rem 1rem;text-align:left;
+                 color:#64748b;font-size:.7rem;font-weight:700;
+                 text-transform:uppercase;letter-spacing:.06em;
+                 border-bottom:2px solid #334155}
+        tbody tr{border-bottom:1px solid #1e293b;transition:background .1s}
+        tbody tr:hover{background:#1e293b}
+        tbody td{padding:.55rem 1rem;color:#cbd5e1;vertical-align:middle}
+
+        /* Verdict badges */
+        .vb{display:inline-block;padding:1px 7px;border-radius:4px;
+            font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+        .v-block{background:#450a0a;color:#f87171;border:1px solid #7f1d1d}
+        .v-warn {background:#451a03;color:#fbbf24;border:1px solid #78350f}
+        .v-allow{background:#052e16;color:#4ade80;border:1px solid #14532d}
+
+        /* SQL cell */
+        .sql{font-family:'JetBrains Mono','Fira Code',monospace;font-size:.78rem;
+             max-width:380px;overflow:hidden;text-overflow:ellipsis;
+             white-space:nowrap;color:#f1f5f9}
+        .fp{font-family:monospace;font-size:.72rem;color:#475569}
+        .dur{color:#94a3b8}
+        .dur.slow{color:#f87171}
+        .dur.medium{color:#fbbf24}
+        .issues{font-size:.72rem;color:#94a3b8}
+        .empty{text-align:center;padding:4rem;color:#334155;font-size:.9rem}
+
+        /* Row animation */
+        @keyframes fadeIn{from{background:#1e3a5f}to{background:transparent}}
+        .new-row{animation:fadeIn 1.5s ease-out}
+    </style>
+</head>
+<body>
+
+<div class="hdr">
+    <h1>⚡ QueryGuard</h1>
+    {{if .DryRun}}
+    <span class="badge badge-dryrun">DRY RUN</span>
+    {{else}}
+    <span class="badge badge-live">ACTIVE</span>
+    {{end}}
+    <div class="hdr-right">v{{.Version}}</div>
+</div>
+
+<!-- Stats — обновляются каждые 3 секунды через htmx polling -->
+{{template "stats" .Stats}}
+
+<div class="feed-hdr">
+    <h2>Live Query Feed</h2>
+    <span style="font-size:.75rem;color:#64748b">
+        <span class="dot"></span>real-time
+    </span>
+</div>
+
+<div class="tbl-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Verdict</th>
+                <th>SQL</th>
+                <th>Fingerprint</th>
+                <th>Duration</th>
+                <th>Rows</th>
+                <th>Issues / Policy</th>
+            </tr>
+        </thead>
+        <!-- SSE: новые строки добавляются автоматически через hx-ext="sse" -->
+        <tbody
+            id="query-feed"
+            hx-ext="sse"
+            sse-connect="/events"
+            sse-swap="query"
+            hx-swap="afterbegin"
+        >
+            {{if .Entries}}
+                {{range .Entries}}{{template "row" .}}{{end}}
+            {{else}}
+                <tr><td colspan="7" class="empty">
+                    Waiting for queries… run <code>make psql-proxy</code>
+                </td></tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+
+</body>
+</html>
+{{end}}
+
+
+{{/* ─── Stats partial (используется и при загрузке и при polling) ─── */}}
+{{define "stats"}}
+<div class="stats"
+     id="stats"
+     hx-get="/partial/stats"
+     hx-trigger="every 3s"
+     hx-swap="outerHTML">
+    <div class="card c-total">
+        <div class="lbl">Total Queries</div>
+        <div class="val">{{.Total}}</div>
+    </div>
+    <div class="card c-block">
+        <div class="lbl">Blocked</div>
+        <div class="val">{{.Blocked}}</div>
+    </div>
+    <div class="card c-warn">
+        <div class="lbl">Warned</div>
+        <div class="val">{{.Warned}}</div>
+    </div>
+    <div class="card c-allow">
+        <div class="lbl">Allowed</div>
+        <div class="val">{{.Allowed}}</div>
+    </div>
+</div>
+{{end}}
+
+
+{{/* ─── Одна строка таблицы (рендерится и при загрузке и через SSE) ─── */}}
+{{define "row"}}
+<tr class="new-row">
+    <td style="white-space:nowrap;color:#64748b;font-size:.75rem">
+        {{formatTime .Time}}
+    </td>
+    <td>
+        <span class="vb v-{{.Verdict}}">{{.Verdict}}</span>
+    </td>
+    <td>
+        <span class="sql" title="{{.SQL}}">{{truncate .SQL 80}}</span>
+    </td>
+    <td>
+        <span class="fp">{{if .Fingerprint}}{{truncate .Fingerprint 8}}{{else}}—{{end}}</span>
+    </td>
+    <td>
+        <span class="dur {{durClass .DurationMs}}">{{formatDur .DurationMs}}</span>
+    </td>
+    <td style="color:#94a3b8">
+        {{if gt .Rows 0}}{{.Rows}}{{else}}—{{end}}
+    </td>
+    <td class="issues">
+        {{if .PolicyName}}
+            <span style="color:#f87171">{{.PolicyName}}</span>
+        {{else if .Issues}}
+            {{joinIssues .Issues}}
+        {{else}}
+            <span style="color:#334155">—</span>
+        {{end}}
+    </td>
+</tr>
+{{end}}

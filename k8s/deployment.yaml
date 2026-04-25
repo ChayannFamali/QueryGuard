@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: queryguard
+  namespace: queryguard
+  labels:
+    app: queryguard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: queryguard
+  template:
+    metadata:
+      labels:
+        app: queryguard
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: queryguard
+          image: queryguard:latest
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: proxy
+              containerPort: 5433
+            - name: dashboard
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9090
+
+          volumeMounts:
+            - name: config
+              mountPath: /etc/queryguard
+              readOnly: true
+
+          # Liveness: если /health не отвечает — перезапустить pod
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # Readiness: pod готов принимать трафик
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 9090
+            initialDelaySeconds: 3
+            periodSeconds: 5
+
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+
+      volumes:
+        - name: config
+          configMap:
+            name: queryguard-config

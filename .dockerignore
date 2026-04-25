@@ -1,0 +1,8 @@
+.git
+.gitignore
+*.md
+bin/
+coverage.out
+docker/pgdata/
+**/*__test.go
+tests/

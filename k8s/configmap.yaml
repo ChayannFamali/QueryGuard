@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: queryguard-config
+  namespace: queryguard
+data:
+  config.yaml: |
+    proxy:
+      listen_addr: "0.0.0.0:5433"
+      target_addr: "postgres-service:5432"
+
+    log:
+      level: "info"
+      format: "json"
+
+    dashboard:
+      enabled: true
+      listen_addr: "0.0.0.0:8080"
+      username: "admin"
+      password: "admin"
+
+    policy:
+      dry_run: false
+      config_path: "/etc/queryguard/policies.yaml"
+
+    metrics:
+      enabled: true
+      listen_addr: "0.0.0.0:9090"
+
+  policies.yaml: |
+    policies:
+      - name: block-missing-limit
+        on: [MISSING_LIMIT]
+        action: BLOCK
+        message: "Add LIMIT to your query"
+
+      - name: warn-select-star
+        on: [SELECT_STAR]
+        action: WARN
+        message: "Specify columns explicitly"
+
+      - name: warn-n-plus-one
+        on: [N_PLUS_ONE]
+        action: WARN
+        message: "N+1 detected"
