@@ -31,9 +31,9 @@ RUN apk add --no-cache ca-certificates tzdata && \
 
 COPY --from=builder /queryguard /usr/local/bin/queryguard
 
-# Конфиги монтируются снаружи через ConfigMap / volume
+# Configs are mounted at runtime via volumes/ConfigMaps — never baked into the image.
+# This prevents credentials from being committed to the image layers.
 RUN mkdir -p /etc/queryguard
-COPY configs/ /etc/queryguard/
 
 USER queryguard
 

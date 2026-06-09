@@ -27,8 +27,12 @@ type Proxy struct {
 	store      *dashboard.Store // ← новое
 }
 
-func New(cfg *config.Config, logger *zap.Logger) (*Proxy, error) {
-	az := analyzer.New()
+func New(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*Proxy, error) {
+	az := analyzer.New(ctx, analyzer.Options{
+		N1Threshold:    cfg.Analyzer.N1Threshold,
+		ComplexityWarn: cfg.Analyzer.ComplexityWarn,
+		ComplexityCrit: cfg.Analyzer.ComplexityCrit,
+	})
 	pe, err := policy.New(cfg.Policy.ConfigPath, cfg.Policy.DryRun, logger)
 	if err != nil {
 		return nil, fmt.Errorf("init policy engine: %w", err)
@@ -49,6 +53,10 @@ func (p *Proxy) Store() *dashboard.Store { return p.store }
 // Добавь эти два метода рядом с методом Start()
 func (p *Proxy) Metrics() *metrics.Metrics {
 	return p.metrics
+}
+
+func (p *Proxy) Analyzer() *analyzer.Analyzer {
+	return p.analyzer
 }
 
 // Start — без изменений (оставь как было)

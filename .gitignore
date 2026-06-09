@@ -2,3 +2,6 @@ bin/
 coverage.out
 coverage.html
 docker/pgdata/
+.env
+.env.*
+!.env.example

@@ -37,6 +37,7 @@ type Session struct {
 	lastVerdict    string
 	lastProtocol   string
 	pendingEntry   *dashboard.QueryEntry
+	logSQL         bool
 }
 
 // 2. Обновить сигнатуру newSession:
@@ -48,6 +49,7 @@ func newSession(
 	pe *policy.Engine,
 	m *metrics.Metrics,
 	store *dashboard.Store,
+	logSQL bool,
 ) *Session {
 	return &Session{
 		id:         id,
@@ -58,6 +60,7 @@ func newSession(
 		policy:     pe,
 		metrics:    m,
 		store:      store,
+		logSQL:     logSQL,
 	}
 }
 
@@ -230,12 +233,16 @@ func parseStartupParams(data []byte) map[string]string {
 // ─── PROXY (pgproto3, после startup) ────────────────────────────────────────
 
 func (s *Session) proxy(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	errCh := make(chan error, 2)
 	go func() { errCh <- s.clientToServer(ctx) }()
 	go func() { errCh <- s.serverToClient(ctx) }()
 
 	select {
 	case err := <-errCh:
+		cancel() // signal the other goroutine to stop
 		if isNormalClose(err) {
 			return nil
 		}
@@ -350,13 +357,16 @@ func (s *Session) analyzeAndDecide(msg pgproto3.FrontendMessage) *policy.Decisio
 		fp = fp[:8]
 	}
 
-	s.logger.Info("⚡ SQL",
+	fields := []zap.Field{
 		zap.String("protocol", protocol),
-		zap.String("sql", sql),
 		zap.String("fingerprint", fp),
 		zap.Int("complexity", result.Complexity),
 		zap.String("verdict", string(decision.Action)),
-	)
+	}
+	if s.logSQL {
+		fields = append(fields, zap.String("sql", sql))
+	}
+	s.logger.Info("⚡ SQL", fields...)
 
 	//  Метрика: счётчик запросов
 	s.metrics.QueriesTotal.WithLabelValues(verdict, protocol).Inc()
@@ -517,5 +527,13 @@ func isNormalClose(err error) bool {
 		return true
 	}
 	var netErr *net.OpError
-	return errors.As(err, &netErr)
+	if errors.As(err, &netErr) {
+		// Only treat actual connection closure as normal, not timeouts
+		if errors.Is(netErr.Err, io.EOF) ||
+			strings.Contains(netErr.Err.Error(), "use of closed network connection") ||
+			strings.Contains(netErr.Err.Error(), "connection reset by peer") {
+			return true
+		}
+	}
+	return false
 }

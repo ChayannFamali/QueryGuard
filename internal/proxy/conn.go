@@ -34,7 +34,7 @@ func (p *Proxy) handleConn(ctx context.Context, id uint64, clientConn net.Conn) 
 	}
 	defer targetConn.Close()
 
-	session := newSession(id, clientConn, targetConn, log, p.analyzer, p.policy, p.metrics, p.store)
+	session := newSession(id, clientConn, targetConn, log, p.analyzer, p.policy, p.metrics, p.store, p.cfg.Log.LogSQL)
 	if err := session.Run(ctx); err != nil {
 		log.Debug("session ended", zap.Error(err))
 	}

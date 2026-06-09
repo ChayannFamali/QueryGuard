@@ -4,6 +4,7 @@ metadata:
   name: queryguard-config
   namespace: queryguard
 data:
+  # Credentials are NOT in this ConfigMap — they come from the Secret via env vars.
   config.yaml: |
     proxy:
       listen_addr: "0.0.0.0:5433"
@@ -12,12 +13,12 @@ data:
     log:
       level: "info"
       format: "json"
+      log_sql: false
 
     dashboard:
       enabled: true
       listen_addr: "0.0.0.0:8080"
-      username: "admin"
-      password: "admin"
+      # username/password injected via QG_DASHBOARD_USERNAME / QG_DASHBOARD_PASSWORD env vars
 
     policy:
       dry_run: false
@@ -26,20 +27,31 @@ data:
     metrics:
       enabled: true
       listen_addr: "0.0.0.0:9090"
+      # username/password injected via QG_METRICS_USERNAME / QG_METRICS_PASSWORD env vars
+
+    analyzer:
+      n1_threshold: 5
+      complexity_warn: 30
+      complexity_crit: 60
 
   policies.yaml: |
     policies:
       - name: block-missing-limit
         on: [MISSING_LIMIT]
         action: BLOCK
-        message: "Add LIMIT to your query"
+        message: "Add LIMIT to your query to prevent fetching unbounded rows"
 
-      - name: warn-select-star
+      - name: block-select-star
         on: [SELECT_STAR]
-        action: WARN
-        message: "Specify columns explicitly"
+        action: BLOCK
+        message: "Specify columns explicitly instead of SELECT *"
 
       - name: warn-n-plus-one
         on: [N_PLUS_ONE]
         action: WARN
-        message: "N+1 detected"
+        message: "N+1 detected — consider batching queries or using JOINs"
+
+      - name: warn-high-complexity
+        on: [HIGH_COMPLEXITY]
+        action: WARN
+        message: "Query complexity is high — consider simplifying"

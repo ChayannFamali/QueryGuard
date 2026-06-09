@@ -2,27 +2,30 @@ proxy:
   listen_addr: "0.0.0.0:5433"
   target_addr: "localhost:5432"
 
-postgres:
-  host: "localhost"
-  port: 5432
-  user: "postgres"
-  password: "postgres"
-  database: "postgres"
-
 log:
   level: "debug"      # debug | info | warn | error
-  format: "console"  # console | json
+  format: "console"   # console | json
+  log_sql: false      # set to false in production to avoid logging SQL with sensitive data
 
 dashboard:
   enabled: true
   listen_addr: "0.0.0.0:8080"
-  username: "admin"
-  password: "admin"
+  # Override via env vars QG_DASHBOARD_USERNAME / QG_DASHBOARD_PASSWORD
+  username: ""
+  password: ""
 
 policy:
-  dry_run: false       # на старте всегда true — только логируем, не блокируем
+  dry_run: false      # set to true for safe onboarding — only logs, never blocks
   config_path: "configs/policies.yaml"
 
 metrics:
   enabled: true
   listen_addr: "0.0.0.0:9090"
+  # Override via env vars QG_METRICS_USERNAME / QG_METRICS_PASSWORD
+  username: ""
+  password: ""
+
+analyzer:
+  n1_threshold: 5         # N+1 alert threshold (same fingerprint N times per second)
+  complexity_warn: 30     # complexity score at which WARN is emitted
+  complexity_crit: 60     # complexity score at which CRITICAL is emitted

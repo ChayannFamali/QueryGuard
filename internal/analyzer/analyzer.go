@@ -1,16 +1,28 @@
 package analyzer
 
 import (
+	"context"
+	"strings"
+
 	pg_query "github.com/pganalyze/pg_query_go/v4"
 )
 
-type Analyzer struct {
-	n1 *N1Detector
+// Options holds configurable analyzer thresholds
+type Options struct {
+	N1Threshold    int
+	ComplexityWarn int
+	ComplexityCrit int
 }
 
-func New() *Analyzer {
+type Analyzer struct {
+	n1  *N1Detector
+	opts Options
+}
+
+func New(ctx context.Context, opts Options) *Analyzer {
 	return &Analyzer{
-		n1: newN1Detector(),
+		n1:   newN1Detector(ctx, opts.N1Threshold),
+		opts: opts,
 	}
 }
 
@@ -36,6 +48,16 @@ func (a *Analyzer) Analyze(connID uint64, sql string) *Result {
 		})
 	}
 
+	// Fast-path: skip AST parsing for non-SELECT statements
+	trimmed := strings.TrimSpace(sql)
+	if len(trimmed) < 6 {
+		return result
+	}
+	head := trimmed[:min(10, len(trimmed))]
+	if !strings.EqualFold(head, "select") && !strings.HasPrefix(strings.ToUpper(head), "SELECT") {
+		return result
+	}
+
 	// Парсим AST
 	parsed, err := pg_query.Parse(sql)
 	if err != nil {
@@ -57,12 +79,25 @@ func (a *Analyzer) Analyze(connID uint64, sql string) *Result {
 		result.Complexity += calcComplexity(sel)
 	}
 
-	// Complexity issue
-	if result.Complexity > 30 {
-		result.Issues = append(result.Issues, complexityIssue(result.Complexity))
+	// Complexity issue using configurable thresholds
+	warnThreshold := a.opts.ComplexityWarn
+	critThreshold := a.opts.ComplexityCrit
+	if warnThreshold <= 0 {
+		warnThreshold = 30
+	}
+	if critThreshold <= 0 {
+		critThreshold = 60
+	}
+	if result.Complexity >= warnThreshold {
+		result.Issues = append(result.Issues, complexityIssue(result.Complexity, warnThreshold, critThreshold))
 	}
 
 	return result
+}
+
+// Stop shuts down background goroutines (N+1 cleanup loop)
+func (a *Analyzer) Stop() {
+	a.n1.Stop()
 }
 
 // ForgetConn вызывается при дисконнекте клиента

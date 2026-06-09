@@ -2,12 +2,19 @@ package integration_test
 
 import (
 	"database/sql"
+	"os"
 	"testing"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-const proxyDSN = "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
+// proxyDSN is configurable via PROXY_DSN env var to avoid hardcoded credentials.
+var proxyDSN = func() string {
+	if dsn := os.Getenv("PROXY_DSN"); dsn != "" {
+		return dsn
+	}
+	return "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"
+}()
 
 func TestProxy_BlocksMissingLimit(t *testing.T) {
 	db, err := sql.Open("pgx", proxyDSN)

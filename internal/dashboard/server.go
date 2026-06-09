@@ -3,6 +3,7 @@ package dashboard
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"embed"
 	"fmt"
 	"html/template"
@@ -17,14 +18,16 @@ import (
 var templateFS embed.FS
 
 type Server struct {
-	store   *Store
-	logger  *zap.Logger
-	dryRun  bool
-	version string
-	tmpl    *template.Template
+	store    *Store
+	logger   *zap.Logger
+	dryRun   bool
+	version  string
+	tmpl     *template.Template
+	username string
+	password string
 }
 
-func NewServer(store *Store, dryRun bool, logger *zap.Logger) (*Server, error) {
+func NewServer(store *Store, dryRun bool, username, password string, logger *zap.Logger) (*Server, error) {
 	funcMap := template.FuncMap{
 		"formatTime": func(t time.Time) string {
 			return t.Format("15:04:05.000")
@@ -62,11 +65,13 @@ func NewServer(store *Store, dryRun bool, logger *zap.Logger) (*Server, error) {
 	}
 
 	return &Server{
-		store:   store,
-		logger:  logger,
-		dryRun:  dryRun,
-		version: "0.0.1",
-		tmpl:    tmpl,
+		store:    store,
+		logger:   logger,
+		dryRun:   dryRun,
+		version:  "0.0.1",
+		tmpl:     tmpl,
+		username: username,
+		password: password,
 	}, nil
 }
 
@@ -77,9 +82,17 @@ func (s *Server) Start(ctx context.Context, addr string) error {
 	mux.HandleFunc("/events", s.handleSSE)
 	mux.HandleFunc("/partial/stats", s.handleStatsPartial)
 
+	var handler http.Handler = mux
+	if s.username != "" && s.password != "" {
+		handler = s.basicAuthMiddleware(mux)
+	}
+
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: mux,
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	go func() {
@@ -92,12 +105,27 @@ func (s *Server) Start(ctx context.Context, addr string) error {
 	s.logger.Info("dashboard listening",
 		zap.String("addr", addr),
 		zap.String("url", "http://"+addr),
+		zap.Bool("auth_enabled", s.username != ""),
 	)
 
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
 	return nil
+}
+
+func (s *Server) basicAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, pass, ok := r.BasicAuth()
+		if !ok ||
+			subtle.ConstantTimeCompare([]byte(user), []byte(s.username)) != 1 ||
+			subtle.ConstantTimeCompare([]byte(pass), []byte(s.password)) != 1 {
+			w.Header().Set("WWW-Authenticate", `Basic realm="QueryGuard Dashboard"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // ─── Handlers ───────────────────────────────────────────────────────────────

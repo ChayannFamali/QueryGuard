@@ -4,12 +4,14 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: queryguard-postgres
+    env_file: .env
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: 123456
       POSTGRES_DB: postgres
-    ports:
-      - "5432:5432"
+      # POSTGRES_PASSWORD loaded from .env file
+    # Do NOT expose 5432 on the host — apps connect via proxy on 5433
+    expose:
+      - "5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -18,21 +20,39 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    networks:
+      - db-net
 
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: dpage/pgadmin4:8.12
     container_name: queryguard-pgadmin
+    env_file: .env
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      # PGADMIN_DEFAULT_PASSWORD loaded from .env file
     ports:
       - "5050:80"
     depends_on:
       postgres:
         condition: service_healthy
-        
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    networks:
+      - db-net
+
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.53.0
     container_name: queryguard-prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
@@ -40,16 +60,36 @@ services:
       - "9091:9090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    networks:
+      - metrics-net
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.1.0
     container_name: queryguard-grafana
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+    env_file: .env
+    # GF_SECURITY_ADMIN_PASSWORD loaded from .env file
     ports:
       - "3000:3000"
     depends_on:
       - prometheus
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    networks:
+      - metrics-net
 
 volumes:
-  pgdata: 
+  pgdata:
+
+networks:
+  db-net:
+    driver: bridge
+  metrics-net:
+    driver: bridge

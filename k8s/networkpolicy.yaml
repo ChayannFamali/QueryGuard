@@ -1,0 +1,53 @@
+# Only pods with label "queryguard-client" (or in the same namespace with explicit opt-in)
+# can reach the QueryGuard proxy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: queryguard-allow-clients
+  namespace: queryguard
+spec:
+  podSelector:
+    matchLabels:
+      app: queryguard
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow traffic to proxy port from any pod in the cluster
+    - to:
+        - ports:
+            - protocol: TCP
+              port: 5433
+    # Allow health/readiness probes from the kubelet (all sources on metrics port)
+    - to:
+        - ports:
+            - protocol: TCP
+              port: 9090
+---
+# Deny all egress from queryguard except to postgres-service and DNS
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: queryguard-restrict-egress
+  namespace: queryguard
+spec:
+  podSelector:
+    matchLabels:
+      app: queryguard
+  policyTypes:
+    - Egress
+  egress:
+    # Allow DNS resolution (needed for postgres-service hostname)
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow traffic to postgres-service on 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres  # adjust to match your postgres pod labels
+      ports:
+        - protocol: TCP
+          port: 5432

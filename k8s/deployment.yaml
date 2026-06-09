@@ -19,10 +19,17 @@ spec:
         prometheus.io/port: "9090"
         prometheus.io/path: "/metrics"
     spec:
+      serviceAccountName: queryguard
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: queryguard
-          image: queryguard:latest
-          imagePullPolicy: IfNotPresent
+          # Replace with your image registry and pinned tag
+          image: YOUR_REGISTRY/queryguard:0.0.1
+          imagePullPolicy: Always
 
           ports:
             - name: proxy
@@ -32,12 +39,43 @@ spec:
             - name: metrics
               containerPort: 9090
 
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          env:
+            - name: QG_DASHBOARD_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: queryguard-secret
+                  key: dashboard-username
+            - name: QG_DASHBOARD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: queryguard-secret
+                  key: dashboard-password
+            - name: QG_METRICS_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: queryguard-secret
+                  key: metrics-username
+            - name: QG_METRICS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: queryguard-secret
+                  key: metrics-password
+
           volumeMounts:
             - name: config
               mountPath: /etc/queryguard
               readOnly: true
+            - name: tmp-volume
+              mountPath: /tmp
 
-          # Liveness: если /health не отвечает — перезапустить pod
+          # Liveness: /health and /ready are always unauthenticated
           livenessProbe:
             httpGet:
               path: /health
@@ -46,7 +84,6 @@ spec:
             periodSeconds: 10
             failureThreshold: 3
 
-          # Readiness: pod готов принимать трафик
           readinessProbe:
             httpGet:
               path: /ready
@@ -66,3 +103,5 @@ spec:
         - name: config
           configMap:
             name: queryguard-config
+        - name: tmp-volume
+          emptyDir: {}

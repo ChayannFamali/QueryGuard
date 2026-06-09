@@ -46,25 +46,26 @@ func main() {
 		zap.Bool("dry_run", cfg.Policy.DryRun),
 	)
 
-	p, err := proxy.New(cfg, logger)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	p, err := proxy.New(ctx, cfg, logger)
 	if err != nil {
 		logger.Error("failed to init proxy", zap.Error(err))
 		os.Exit(1)
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	defer p.Analyzer().Stop()
 
 	// Metrics HTTP сервер
 	if cfg.Metrics.Enabled {
 		go func() {
-			if err := metrics.StartServer(ctx, cfg.Metrics.ListenAddr, p.Metrics(), logger); err != nil {
+			if err := metrics.StartServer(ctx, cfg.Metrics.ListenAddr, p.Metrics(), cfg.Metrics.Username, cfg.Metrics.Password, logger); err != nil {
 				logger.Error("metrics server error", zap.Error(err))
 			}
 		}()
 	}
 	if cfg.Dashboard.Enabled {
-		dash, err := dashboard.NewServer(p.Store(), cfg.Policy.DryRun, logger)
+		dash, err := dashboard.NewServer(p.Store(), cfg.Policy.DryRun, cfg.Dashboard.Username, cfg.Dashboard.Password, logger)
 		if err != nil {
 			logger.Error("failed to init dashboard", zap.Error(err))
 			os.Exit(1)

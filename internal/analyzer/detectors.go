@@ -149,11 +149,11 @@ func countSubqueries(node *pg_query.Node) int {
 	return 0
 }
 
-// complexityIssue создаёт Issue по score
-func complexityIssue(score int) Issue {
+// complexityIssue создаёт Issue по score с настраиваемыми порогами
+func complexityIssue(score, warnThreshold, critThreshold int) Issue {
 	sev := SeverityWarning
 	msg := fmt.Sprintf("complexity score %d — consider simplifying query", score)
-	if score > 60 {
+	if score > critThreshold {
 		sev = SeverityCritical
 		msg = fmt.Sprintf("complexity score %d — query is very expensive", score)
 	}

@@ -50,8 +50,10 @@ docker-clean:
 ## K8s деплой (требует kubectl + кластер)
 k8s-deploy:
 	kubectl apply -f k8s/namespace.yaml
-	kubectl apply -f k8s/configmap.yaml
 	kubectl apply -f k8s/secret.yaml
+	kubectl apply -f k8s/serviceaccount.yaml
+	kubectl apply -f k8s/configmap.yaml
+	kubectl apply -f k8s/networkpolicy.yaml
 	kubectl apply -f k8s/deployment.yaml
 	kubectl apply -f k8s/service.yaml
 	kubectl rollout status deployment/queryguard -n queryguard

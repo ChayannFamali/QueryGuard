@@ -1,4 +1,6 @@
-# Proxy: доступен внутри кластера как queryguard-proxy:5433
+# Dashboard and Metrics: ClusterIP only.
+# Expose externally via an Ingress with TLS termination.
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -12,22 +14,20 @@ spec:
       port: 5433
       targetPort: 5433
 ---
-# Dashboard: для внешнего доступа
 apiVersion: v1
 kind: Service
 metadata:
   name: queryguard-dashboard
   namespace: queryguard
 spec:
-  type: NodePort
+  # Changed from NodePort to ClusterIP — use Ingress for external access
+  type: ClusterIP
   selector:
     app: queryguard
   ports:
     - name: dashboard
       port: 8080
       targetPort: 8080
-      nodePort: 30080
     - name: metrics
       port: 9090
       targetPort: 9090
-      nodePort: 30090
